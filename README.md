@@ -1,15 +1,8 @@
 # Causal-Inference
 
-This repository contains projects and analyses for our Causal Inference course.
-
-## Team
-
-- Carolyn Ha
-- Hayley Shin
-- Juliana Pellicano
+This repository contains projects and analyses for our S&DS 6165 (Topics in Causal Inference) course.
 
 ---
-
 ## Project 1: Optimal Trimming and Overlap in Causal Inference
 
 ### Overview
