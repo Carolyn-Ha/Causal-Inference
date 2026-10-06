@@ -1,31 +1,34 @@
 # Causal-Inference
 
-This repository contains projects and analyses for our S&DS 6165 (Topics in Causal Inference) course.
+Course project repository for **S&DS 6165: Topics in Causal Inference**.
 
----
-## Project 1: Optimal Trimming and Overlap in Causal Inference
+## Project 1: Optimal Trimming and Overlap
 
-### Overview
+This project studies sample trimming based on propensity scores, following Crump et al. (2009), *Dealing with Limited Overlap in Estimation of Average Treatment Effects*.
 
-Our first project studies optimal sample trimming based on propensity scores, building on:
+We focus on two tasks:
 
-> Crump, R. K., Hotz, V. J., Imbens, G. W., & Mitnik, O. A. (2009).  
-> *Dealing with limited overlap in estimation of average treatment effects.*  
-> Biometrika, 96(1), 187–199.
+### Replication
 
-The paper studies how restricting the analysis to a subset of observations with sufficient propensity-score overlap can improve the precision of treatment effect estimation.
+We replicate selected theoretical and empirical results from Crump et al. (2009), including the optimal propensity-score trimming rule and its effect on estimation variance.
 
-Our project has two main components:
+- `Replication1/`: Replication of Table 1 and related simulations
+- `Replication2/`: Replication of additional empirical results
 
-1. Replicate key empirical and simulation results from Crump et al. (2009).
-2. Extend the optimal trimming framework to settings with heteroskedastic potential outcomes.
+### Extension
 
----
+We extend the original framework to **heteroskedastic outcomes**, where outcome variance can depend on the propensity score.
 
-### Part 1: Replication
+The extension compares:
+- Standard propensity-score trimming
+- Optimal symmetric trimming
+- Variance-aware trimming
 
+See `Extension1/` for the simulation code, results, and visualizations.
 
----
+## Reference
 
-### Part 2: Heteroskedastic Extension
+Crump, R. K., Hotz, V. J., Imbens, G. W., & Mitnik, O. A. (2009).  
+*Dealing with limited overlap in estimation of average treatment effects.*  
+Biometrika, 96(1), 187–199.
 
