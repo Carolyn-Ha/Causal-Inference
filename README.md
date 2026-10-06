@@ -1,34 +1,11 @@
 # Causal-Inference
 
-Course project repository for **S&DS 6165: Topics in Causal Inference**.
+This repository contains projects and analyses for our S&DS 6165 (Topics in Causal Inference) course.
 
-## Project 1: Optimal Trimming and Overlap
+## Project 1: Optimal Trimming and Overlap in Causal Inference
 
-This project studies sample trimming based on propensity scores, following Crump et al. (2009), *Dealing with Limited Overlap in Estimation of Average Treatment Effects*.
-
-We focus on two tasks:
-
-### Replication
-
-We replicate selected theoretical and empirical results from Crump et al. (2009), including the optimal propensity-score trimming rule and its effect on estimation variance.
-
-- `Replication1/`: Replication of Table 1 and related simulations
-- `Replication2/`: Replication of additional empirical results
-
-### Extension
-
-We extend the original framework to **heteroskedastic outcomes**, where outcome variance can depend on the propensity score.
-
-The extension compares:
-- Standard propensity-score trimming
-- Optimal symmetric trimming
-- Variance-aware trimming
-
-See `Extension1/` for the simulation code, results, and visualizations.
-
-## Reference
-
-Crump, R. K., Hotz, V. J., Imbens, G. W., & Mitnik, O. A. (2009).  
-*Dealing with limited overlap in estimation of average treatment effects.*  
-Biometrika, 96(1), 187–199.
+- **Replication 1:** Replicates the simulation results in Crump et al. (2009), comparing fixed propensity-score trimming rules with the optimal symmetric cutoff. :chatgpt-content-reference{index="0"}
+- **Extension 1:** Extends the trimming framework to heteroskedastic outcomes and studies when propensity-score-only trimming may become inefficient. :chatgpt-content-reference{index="1"}
+- **Replication 2:** Replicates the paper’s empirical analysis using the Right Heart Catheterization data, including propensity-score distributions, sample construction, and treatment-effect estimates. :chatgpt-content-reference{index="2"}
+- **Extension 2:** Compares hard trimming with smooth weighting and boundary smoothing, focusing on efficiency, effective sample size, and target-population shift. :chatgpt-content-reference{index="3"}
 
