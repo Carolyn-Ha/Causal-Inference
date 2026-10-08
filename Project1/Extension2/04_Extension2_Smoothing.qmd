@@ -1,0 +1,1187 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+set.seed(123)
+
+# large Monte Carlo sample
+n <- 1000000
+
+# start with one Beta scenario
+beta <- 0.5
+gamma <- 0.5
+
+# simulate true propensity scores
+e <- rbeta(n, shape1 = beta, shape2 = gamma)
+
+# variance contribution under homoskedasticity
+v_contrib <- 1/e + 1/(1 - e)
+
+
+epsilons <- c(0.005, 0.01, 0.025, 0.05)
+
+# function for hard trimming
+hard_var <- function(e, alpha) {
+
+  keep <- e >= alpha & e <= 1 - alpha
+
+  v <- 1/e + 1/(1 - e)
+
+  mean(v[keep]) / mean(keep)
+}
+
+smooth_var <- function(e) {
+
+  w <- e * (1 - e)
+
+  v <- 1/e + 1/(1 - e)
+
+  mean(w^2 * v) / mean(w)^2
+}
+
+
+ess_ratio <- function(w) {
+  (sum(w)^2 / sum(w^2)) / length(w)
+}
+
+
+
+tv_distance <- function(e, w, breaks = seq(0, 1, by = 0.05)) {
+
+  # Put propensity scores into bins
+  bins <- cut(
+    e,
+    breaks = breaks,
+    include.lowest = TRUE
+  )
+
+  # Original proportion of observations in each bin
+  p_original <- as.numeric(table(bins)) / length(e)
+
+  # Total weight in each bin
+  weighted_counts <- tapply(w, bins, sum)
+
+  # In case any bin is empty
+  weighted_counts[is.na(weighted_counts)] <- 0
+
+  # Convert weighted counts into proportions
+  p_weighted <- weighted_counts / sum(weighted_counts)
+
+  # Total variation distance
+  TVD <- 0.5 * sum(abs(p_original - p_weighted))
+
+  return(TVD)
+}
+
+smoothstep <- function(x) {
+  
+  ifelse(
+    x <= 0, 0,
+    ifelse(
+      x >= 1, 1,
+      3*x^2 - 2*x^3
+    )
+  )
+}
+
+
+boundary_smooth_weights <- function(e, delta,
+                                    alpha1 = 0.10,
+                                    alpha2 = 0.90) {
+  
+  # Smooth transition from 0 to 1 around the lower cutoff
+  left <- smoothstep(
+    (e - (alpha1 - delta)) / (2 * delta)
+  )
+  
+  # Smooth transition from 1 to 0 around the upper cutoff
+  right <- smoothstep(
+    ((alpha2 + delta) - e) / (2 * delta)
+  )
+  
+  w <- left * right
+  
+  return(w)
+}
+
+weighted_var <- function(e, w) {
+
+  v <- 1/e + 1/(1 - e)
+
+  mean(w^2 * v) / mean(w)^2
+}
+
+```
+
+```{r}
+set.seed(123)
+
+# Large Monte Carlo sample
+n <- 1000000
+
+# Start with one of the Beta distributions from the paper
+beta <- 0.5
+gamma <- 0.5
+
+# Simulate propensity scores
+e <- rbeta(n, shape1 = beta, shape2 = gamma)
+
+# Variance contribution with no trimming
+v <- 1/e + 1/(1 - e)
+
+# No trimming
+V_none <- mean(v)
+
+# Hard trimming at 0.01
+V_001 <- hard_var(e, 0.01)
+
+# Hard trimming at 0.10
+V_010 <- hard_var(e, 0.10)
+
+# Search over possible alpha values to find the optimal hard cutoff
+alphas <- seq(0.001, 0.49, by = 0.001)
+
+V_alpha <- sapply(alphas, function(a) {
+  hard_var(e, a)
+})
+
+# Optimal alpha
+alpha_star <- alphas[which.min(V_alpha)]
+
+# Corresponding minimum variance
+V_star <- min(V_alpha)
+
+# Print the results
+V_none
+V_001
+V_010
+alpha_star
+V_star
+```
+
+```{r}
+ratio_none <- V_none / V_star
+ratio_001  <- V_001 / V_star
+ratio_010  <- V_010 / V_star
+
+ratio_none
+ratio_001
+ratio_010
+```
+
+```{r}
+results <- data.frame(
+  method = c("No trimming", "Trim 0.01", "Trim 0.10", "Optimal hard trim"),
+  variance = c(V_none, V_001, V_010, V_star),
+  relative_to_optimal = c(
+    V_none / V_star,
+    V_001 / V_star,
+    V_010 / V_star,
+    1
+  )
+)
+
+results
+```
+
+```{r}
+set.seed(123)
+
+n <- 1000000
+
+# All Beta parameter combinations used in the paper
+param_grid <- data.frame(
+  beta  = c(0.5, 0.5, 0.5, 0.5,
+            1.0, 1.0, 1.0,
+            2.0, 2.0,
+            4.0),
+  gamma = c(0.5, 1.0, 2.0, 4.0,
+            1.0, 2.0, 4.0,
+            2.0, 4.0,
+            4.0)
+)
+
+run_one_beta <- function(beta, gamma, n = 1000000) {
+
+  # simulate propensity scores
+
+  e <- rbeta(n, shape1 = beta, shape2 = gamma)
+
+
+  # har trimming variance calculations
+
+  # variance contribution with no trimming
+  v <- 1/e + 1/(1 - e)
+
+  # no trimming
+  V_none <- mean(v)
+
+  # fixed trimming rules
+  V_001 <- hard_var(e, 0.01)
+  V_010 <- hard_var(e, 0.10)
+
+  # search for optimal hard cutoff
+  alphas <- seq(0.001, 0.49, by = 0.001)
+
+  V_alpha <- sapply(alphas, function(a) {
+    hard_var(e, a)
+  })
+
+  alpha_star <- alphas[which.min(V_alpha)]
+  V_star <- min(V_alpha)
+
+
+  # weighting rule definitions
+
+  # optimal hard trimming
+  w_hard_opt <- as.numeric(
+    e >= alpha_star & e <= 1 - alpha_star
+  )
+
+  # fixed 0.10 hard trimming
+  w_hard_010 <- as.numeric(
+    e >= 0.10 & e <= 0.90
+  )
+
+  # full smooth overlap weighting
+  w_smooth <- e * (1 - e)
+
+  # smooth-boundary weights
+  w_delta_005 <- boundary_smooth_weights(
+    e,
+    delta = 0.005
+  )
+
+  w_delta_010 <- boundary_smooth_weights(
+    e,
+    delta = 0.01
+  )
+
+  w_delta_025 <- boundary_smooth_weights(
+    e,
+    delta = 0.025
+  )
+
+  w_delta_050 <- boundary_smooth_weights(
+    e,
+    delta = 0.05
+  )
+
+
+  # variance calculations for boundary smoothing
+
+  V_smooth <- smooth_var(e)
+
+  V_delta_005 <- weighted_var(e, w_delta_005)
+  V_delta_010 <- weighted_var(e, w_delta_010)
+  V_delta_025 <- weighted_var(e, w_delta_025)
+  V_delta_050 <- weighted_var(e, w_delta_050)
+
+  # variance ratios relative to optimal hard trim
+  ratio_delta_005 <- V_delta_005 / V_star
+  ratio_delta_010 <- V_delta_010 / V_star
+  ratio_delta_025 <- V_delta_025 / V_star
+  ratio_delta_050 <- V_delta_050 / V_star
+
+
+  # ess ratios
+
+  ESS_opt <- ess_ratio(w_hard_opt)
+  ESS_010 <- ess_ratio(w_hard_010)
+  ESS_smooth <- ess_ratio(w_smooth)
+
+  ESS_delta_005 <- ess_ratio(w_delta_005)
+  ESS_delta_010 <- ess_ratio(w_delta_010)
+  ESS_delta_025 <- ess_ratio(w_delta_025)
+  ESS_delta_050 <- ess_ratio(w_delta_050)
+
+
+  # tvd
+
+  TVD_opt <- tv_distance(e, w_hard_opt)
+  TVD_010 <- tv_distance(e, w_hard_010)
+  TVD_smooth <- tv_distance(e, w_smooth)
+
+  TVD_delta_005 <- tv_distance(e, w_delta_005)
+  TVD_delta_010 <- tv_distance(e, w_delta_010)
+  TVD_delta_025 <- tv_distance(e, w_delta_025)
+  TVD_delta_050 <- tv_distance(e, w_delta_050)
+
+
+  # tvd sensitivity check
+
+  # bin width = 0.025
+  TVD_010_bw025 <- tv_distance(
+    e,
+    w_hard_010,
+    breaks = seq(0, 1, by = 0.025)
+  )
+
+  TVD_smooth_bw025 <- tv_distance(
+    e,
+    w_smooth,
+    breaks = seq(0, 1, by = 0.025)
+  )
+
+  # bin width = 0.05
+  TVD_010_bw050 <- tv_distance(
+    e,
+    w_hard_010,
+    breaks = seq(0, 1, by = 0.05)
+  )
+
+  TVD_smooth_bw050 <- tv_distance(
+    e,
+    w_smooth,
+    breaks = seq(0, 1, by = 0.05)
+  )
+
+  # bin width = 0.10
+  TVD_010_bw100 <- tv_distance(
+    e,
+    w_hard_010,
+    breaks = seq(0, 1, by = 0.10)
+  )
+
+  TVD_smooth_bw100 <- tv_distance(
+    e,
+    w_smooth,
+    breaks = seq(0, 1, by = 0.10)
+  )
+
+
+  # return results in dataframe
+
+  data.frame(
+    beta = beta,
+    gamma = gamma,
+    alpha_star = alpha_star,
+
+    V_none = V_none,
+    V_001 = V_001,
+    V_010 = V_010,
+    V_star = V_star,
+    V_smooth = V_smooth,
+
+    ratio_none = V_none / V_star,
+    ratio_001 = V_001 / V_star,
+    ratio_010 = V_010 / V_star,
+    ratio_smooth = V_smooth / V_star,
+
+    ESS_opt = ESS_opt,
+    ESS_010 = ESS_010,
+    ESS_smooth = ESS_smooth,
+
+    TVD_opt = TVD_opt,
+    TVD_010 = TVD_010,
+    TVD_smooth = TVD_smooth,
+
+    ratio_delta_005 = ratio_delta_005,
+    ratio_delta_010 = ratio_delta_010,
+    ratio_delta_025 = ratio_delta_025,
+    ratio_delta_050 = ratio_delta_050,
+
+    ESS_delta_005 = ESS_delta_005,
+    ESS_delta_010 = ESS_delta_010,
+    ESS_delta_025 = ESS_delta_025,
+    ESS_delta_050 = ESS_delta_050,
+
+    TVD_delta_005 = TVD_delta_005,
+    TVD_delta_010 = TVD_delta_010,
+    TVD_delta_025 = TVD_delta_025,
+    TVD_delta_050 = TVD_delta_050,
+
+    TVD_010_bw025 = TVD_010_bw025,
+    TVD_smooth_bw025 = TVD_smooth_bw025,
+
+    TVD_010_bw050 = TVD_010_bw050,
+    TVD_smooth_bw050 = TVD_smooth_bw050,
+
+    TVD_010_bw100 = TVD_010_bw100,
+    TVD_smooth_bw100 = TVD_smooth_bw100
+  )
+}
+```
+
+```{r}
+rm(alpha_star)
+```
+
+
+```{r}
+set.seed(123)
+
+results <- do.call(
+  rbind,
+  lapply(seq_len(nrow(param_grid)), function(i) {
+
+    run_one_beta(
+      beta = param_grid$beta[i],
+      gamma = param_grid$gamma[i],
+      n = n
+    )
+
+  })
+)
+
+results
+```
+
+
+
+
+```{r}
+results_table <- results[, c(
+  "beta",
+  "gamma",
+  "alpha_star",
+  "ratio_none",
+  "ratio_001",
+  "ratio_010",
+  "ratio_smooth",
+  "ESS_opt",
+  "ESS_010",
+  "ESS_smooth",
+  "TVD_opt",
+  "TVD_010",
+  "TVD_smooth"
+)]
+
+results_table
+```
+
+```{r}
+boundary_table <- results[, c(
+  "beta",
+  "gamma",
+  "ratio_010",
+  "ratio_delta_005",
+  "ratio_delta_010",
+  "ratio_delta_025",
+  "ratio_delta_050",
+  "ratio_smooth"
+)]
+
+boundary_table[, 3:ncol(boundary_table)] <-
+  round(boundary_table[, 3:ncol(boundary_table)], 3)
+
+boundary_table
+
+
+
+boundary_ess_table <- results[, c(
+  "beta",
+  "gamma",
+  "ESS_010",
+  "ESS_delta_005",
+  "ESS_delta_010",
+  "ESS_delta_025",
+  "ESS_delta_050",
+  "ESS_smooth"
+)]
+
+boundary_ess_table[, 3:ncol(boundary_ess_table)] <-
+  round(boundary_ess_table[, 3:ncol(boundary_ess_table)], 3)
+
+boundary_ess_table
+
+
+
+boundary_tvd_table <- results[, c(
+  "beta",
+  "gamma",
+  "TVD_010",
+  "TVD_delta_005",
+  "TVD_delta_010",
+  "TVD_delta_025",
+  "TVD_delta_050",
+  "TVD_smooth"
+)]
+
+boundary_tvd_table[, 3:ncol(boundary_tvd_table)] <-
+  round(boundary_tvd_table[, 3:ncol(boundary_tvd_table)], 3)
+
+boundary_tvd_table
+```
+
+
+```{r}
+tvd_sensitivity <- results[, c(
+  "beta",
+  "gamma",
+  "TVD_010_bw025",
+  "TVD_smooth_bw025",
+  "TVD_010_bw050",
+  "TVD_smooth_bw050",
+  "TVD_010_bw100",
+  "TVD_smooth_bw100"
+)]
+
+tvd_sensitivity[, 3:ncol(tvd_sensitivity)] <-
+  round(tvd_sensitivity[, 3:ncol(tvd_sensitivity)], 3)
+
+tvd_sensitivity
+```
+
+
+
+```{r}
+results_table$alpha_star   <- round(results_table$alpha_star, 3)
+results_table$ratio_none   <- round(results_table$ratio_none, 2)
+results_table$ratio_001    <- round(results_table$ratio_001, 2)
+results_table$ratio_010    <- round(results_table$ratio_010, 2)
+results_table$ratio_smooth <- round(results_table$ratio_smooth, 2)
+
+results_table$ESS_opt    <- round(results_table$ESS_opt, 3)
+results_table$ESS_010    <- round(results_table$ESS_010, 3)
+results_table$ESS_smooth <- round(results_table$ESS_smooth, 3)
+
+results_table$TVD_opt      <- round(results_table$TVD_opt, 3)
+results_table$TVD_010      <- round(results_table$TVD_010, 3)
+results_table$TVD_smooth   <- round(results_table$TVD_smooth, 3)
+
+results_table
+```
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+
+
+results$scenario <- paste0(
+  "Beta(", results$beta, ", ", results$gamma, ")"
+)
+
+variance_df <- bind_rows(
+  results %>%
+    transmute(
+      scenario,
+      method = "Optimal hard trim",
+      value = 1
+    ),
+  
+  results %>%
+    transmute(
+      scenario,
+      method = "Smooth weighting",
+      value = ratio_smooth
+    )
+)
+
+
+ess_df <- bind_rows(
+  results %>%
+    transmute(
+      scenario,
+      method = "Optimal hard trim",
+      value = ESS_opt
+    ),
+  
+  results %>%
+    transmute(
+      scenario,
+      method = "Smooth weighting",
+      value = ESS_smooth
+    )
+)
+```
+
+
+
+```{r}
+ggplot(variance_df,
+       aes(x = scenario, y = value, shape = method, group = method)) +
+  geom_point(size = 3) +
+  geom_line() +
+  labs(
+    x = NULL,
+    y = "Variance relative to optimal hard trim",
+    shape = "Method"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+
+ggplot(
+  ess_df,
+  aes(x = scenario, y = value, shape = method)
+) +
+  geom_point(
+    position = position_dodge(width = 0.35),
+    size = 3
+  ) +
+  labs(
+    x = NULL,
+    y = "Effective sample size ratio (ESS / N)",
+    shape = "Method"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+
+```{r}
+tvd_df <- bind_rows(
+  results %>%
+    transmute(
+      beta,
+      gamma,
+      scenario = paste0("Beta(", beta, ", ", gamma, ")"),
+      method = "Optimal hard trim",
+      TVD = TVD_opt
+    ),
+  
+  results %>%
+    transmute(
+      beta,
+      gamma,
+      scenario = paste0("Beta(", beta, ", ", gamma, ")"),
+      method = "0.1 hard trim",
+      TVD = TVD_010
+    ),
+  
+  results %>%
+    transmute(
+      beta,
+      gamma,
+      scenario = paste0("Beta(", beta, ", ", gamma, ")"),
+      method = "Smooth weighting",
+      TVD = TVD_smooth
+    )
+)
+```
+
+
+```{r}
+ggplot(
+  tvd_df,
+  aes(x = scenario, y = TVD, shape = method)
+) +
+  geom_point(
+    position = position_dodge(width = 0.4),
+    size = 3
+  ) +
+  labs(
+    x = NULL,
+    y = "Total variation distance from original propensity-score distribution",
+    shape = "Method"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Smoothstep function for boundary smoothing
+smoothstep <- function(x) {
+  ifelse(
+    x <= 0, 0,
+    ifelse(
+      x >= 1, 1,
+      3*x^2 - 2*x^3
+    )
+  )
+}
+
+# Boundary-smoothed trimming weight
+boundary_smooth_weights <- function(e, delta = 0.05,
+                                    alpha1 = 0.10,
+                                    alpha2 = 0.90) {
+  
+  left <- smoothstep(
+    (e - (alpha1 - delta)) / (2 * delta)
+  )
+  
+  right <- smoothstep(
+    ((alpha2 + delta) - e) / (2 * delta)
+  )
+  
+  left * right
+}
+
+# Grid of propensity scores
+e_grid <- seq(0, 1, length.out = 1000)
+
+# Build plot data
+plot_df <- data.frame(
+  e = e_grid,
+  hard_trim = ifelse(e_grid >= 0.10 & e_grid <= 0.90, 1, 0),
+  boundary_smooth = boundary_smooth_weights(e_grid, delta = 0.05),
+  overlap_weight = 4 * e_grid * (1 - e_grid)   # scaled to max = 1
+)
+
+# Long format
+plot_df_long <- plot_df %>%
+  tidyr::pivot_longer(
+    cols = c(hard_trim, boundary_smooth, overlap_weight),
+    names_to = "method",
+    values_to = "weight"
+  ) %>%
+  mutate(
+    method = recode(
+      method,
+      hard_trim = "Hard trim",
+      boundary_smooth = "Boundary smooth",
+      overlap_weight = "Smooth weight: 4e(1-e)"
+    )
+  )
+
+# Plot
+ggplot(plot_df_long, aes(x = e, y = weight, linetype = method)) +
+  geom_line(size = 1.1) +
+  labs(
+    x = "Propensity score e",
+    y = "Weight",
+    linetype = NULL,
+    title = "Comparison of weighting rules"
+  ) +
+  coord_cartesian(ylim = c(0, 1.05)) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+```
+
+
+
+
+```{r}
+library(dplyr)
+
+slide_table <- results %>%
+  filter(
+    (beta == 0.5 & gamma == 4) |
+    (beta == 1   & gamma == 1) |
+    (beta == 4   & gamma == 4)
+  ) %>%
+  mutate(
+    Scenario = case_when(
+      beta == 0.5 & gamma == 4 ~ "Beta(0.5, 4) - Poor overlap",
+      beta == 1   & gamma == 1 ~ "Beta(1, 1) - Moderate overlap",
+      beta == 4   & gamma == 4 ~ "Beta(4, 4) - Strong overlap"
+    )
+  )
+
+slide_table_final <- bind_rows(
+  
+  slide_table %>%
+    transmute(
+      Scenario,
+      Method = "Hard 0.10 trim",
+      `Relative Efficiency Bound` = round(ratio_010, 2),
+      `ESS/N` = round(ESS_010, 2),
+      TVD = round(TVD_010, 2)
+    ),
+  
+  slide_table %>%
+    transmute(
+      Scenario,
+      Method = "Boundary smooth (delta = 0.05)",
+      `Relative Efficiency Bound` = round(ratio_delta_050, 2),
+      `ESS/N` = round(ESS_delta_050, 2),
+      TVD = round(TVD_delta_050, 2)
+    ),
+  
+  slide_table %>%
+    transmute(
+      Scenario,
+      Method = "Smooth weight e(1-e)",
+      `Relative Efficiency Bound` = round(ratio_smooth, 2),
+      `ESS/N` = round(ESS_smooth, 2),
+      TVD = round(TVD_smooth, 2)
+    )
+) %>%
+  mutate(
+    Scenario = factor(
+      Scenario,
+      levels = c(
+        "Beta(0.5, 4) - Poor overlap",
+        "Beta(1, 1) - Moderate overlap",
+        "Beta(4, 4) - Strong overlap"
+      )
+    ),
+    Method = factor(
+      Method,
+      levels = c(
+        "Hard 0.10 trim",
+        "Boundary smooth (delta = 0.05)",
+        "Smooth weight e(1-e)"
+      )
+    )
+  ) %>%
+  arrange(Scenario, Method)
+
+View(slide_table_final)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+eff_plot_df <- results %>%
+  mutate(
+    scenario = paste0("Beta(", beta, ", ", gamma, ")")
+  ) %>%
+  select(
+    scenario,
+    ratio_010,
+    ratio_delta_050,
+    ratio_smooth
+  ) %>%
+  pivot_longer(
+    cols = c(ratio_010, ratio_delta_050, ratio_smooth),
+    names_to = "method",
+    values_to = "relative_bound"
+  ) %>%
+  mutate(
+    method = recode(
+      method,
+      ratio_010 = "Hard 0.10 trim",
+      ratio_delta_050 = "Boundary smooth (δ = 0.05)",
+      ratio_smooth = "Smooth weight e(1-e)"
+    )
+  )
+
+ggplot(
+  eff_plot_df,
+  aes(
+    x = scenario,
+    y = relative_bound,
+    shape = method,
+    group = method
+  )
+) +
+  geom_hline(
+    yintercept = 1,
+    linetype = "dashed"
+  ) +
+  geom_point(
+    position = position_dodge(width = 0.5),
+    size = 3
+  ) +
+  labs(
+    x = "Propensity-score distribution",
+    y = "Relative efficiency bound",
+    shape = NULL,
+    title = "Efficiency Bound Across Propensity-Score Distributions",
+    subtitle = "Relative to the scenario-specific optimal hard trim"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+```
+
+
+```{r}
+full_results_table <- results %>%
+  mutate(
+    Scenario = paste0("Beta(", beta, ", ", gamma, ")")
+  ) %>%
+  transmute(
+    Scenario,
+    `Optimal alpha` = round(alpha_star, 2),
+
+    `Eff: Hard .10` = round(ratio_010, 2),
+    `Eff: Boundary .05` = round(ratio_delta_050, 2),
+    `Eff: Smooth` = round(ratio_smooth, 2),
+
+    `ESS/N: Hard .10` = round(ESS_010, 2),
+    `ESS/N: Boundary .05` = round(ESS_delta_050, 2),
+    `ESS/N: Smooth` = round(ESS_smooth, 2),
+
+    `TVD: Hard .10` = round(TVD_010, 2),
+    `TVD: Boundary .05` = round(TVD_delta_050, 2),
+    `TVD: Smooth` = round(TVD_smooth, 2)
+  )
+
+View(full_results_table)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+delta_plot_df <- results %>%
+  mutate(
+    Scenario = paste0("Beta(", beta, ", ", gamma, ")")
+  ) %>%
+  select(
+    Scenario,
+    ratio_delta_005,
+    ratio_delta_010,
+    ratio_delta_025,
+    ratio_delta_050
+  ) %>%
+  pivot_longer(
+    cols = starts_with("ratio_delta_"),
+    names_to = "delta",
+    values_to = "relative_bound"
+  ) %>%
+  mutate(
+    delta = recode(
+      delta,
+      ratio_delta_005 = 0.005,
+      ratio_delta_010 = 0.010,
+      ratio_delta_025 = 0.025,
+      ratio_delta_050 = 0.050
+    )
+  )
+
+delta_plot_small <- delta_plot_df %>%
+  filter(
+    Scenario %in% c(
+      "Beta(0.5, 4)",
+      "Beta(1, 1)",
+      "Beta(4, 4)"
+    )
+  )
+
+ggplot(
+  delta_plot_small,
+  aes(
+    x = delta,
+    y = relative_bound,
+    group = Scenario,
+    color = Scenario
+  )
+) +
+  geom_hline(
+    yintercept = 1,
+    linetype = "dashed"
+  ) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  labs(
+    x = expression(delta),
+    y = "Relative efficiency bound",
+    color = "Overlap setting",
+    title = "Boundary-Smoothing Sensitivity",
+    subtitle = "Poor, moderate, and strong overlap scenarios"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+```
+
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+boundary_compare_df <- results %>%
+  mutate(
+    Scenario = paste0("Beta(", beta, ", ", gamma, ")")
+  ) %>%
+  select(
+    Scenario,
+    ratio_010,
+    ratio_delta_005,
+    ratio_delta_010,
+    ratio_delta_025,
+    ratio_delta_050,
+    ratio_smooth
+  ) %>%
+  pivot_longer(
+    cols = c(
+      ratio_010,
+      ratio_delta_005,
+      ratio_delta_010,
+      ratio_delta_025,
+      ratio_delta_050,
+      ratio_smooth
+    ),
+    names_to = "Method",
+    values_to = "Relative_Bound"
+  ) %>%
+  mutate(
+    Method = recode(
+      Method,
+      ratio_010       = "Hard trim 0.10",
+      ratio_delta_005 = "Boundary δ = 0.005",
+      ratio_delta_010 = "Boundary δ = 0.010",
+      ratio_delta_025 = "Boundary δ = 0.025",
+      ratio_delta_050 = "Boundary δ = 0.050",
+      ratio_smooth    = "Smooth e(1-e)"
+    )
+  )
+
+ggplot(
+  boundary_compare_df,
+  aes(
+    x = Scenario,
+    y = Relative_Bound,
+    color = Method,
+    group = Method
+  )
+) +
+  geom_hline(
+    yintercept = 1,
+    linetype = "dashed",
+    linewidth = 0.8
+  ) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.5) +
+  labs(
+    x = "Propensity-score distribution",
+    y = "Relative efficiency bound",
+    color = "Weighting method",
+    title = "Boundary-Smoothing Sensitivity Across Beta Scenarios",
+    subtitle = "Efficiency bound relative to the scenario-specific optimal hard trim"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+tvd_plot_df <- results %>%
+  mutate(
+    Scenario = paste0("Beta(", beta, ", ", gamma, ")")
+  ) %>%
+  select(
+    Scenario,
+    TVD_010,
+    TVD_delta_050,
+    TVD_smooth
+  ) %>%
+  pivot_longer(
+    cols = c(TVD_010, TVD_delta_050, TVD_smooth),
+    names_to = "Method",
+    values_to = "TVD"
+  ) %>%
+  mutate(
+    Method = recode(
+      Method,
+      TVD_010 = "Hard 0.10 trim",
+      TVD_delta_050 = "Boundary smooth (δ = 0.05)",
+      TVD_smooth = "Smooth weight e(1-e)"
+    )
+  )
+
+ggplot(
+  tvd_plot_df,
+  aes(
+    x = Scenario,
+    y = TVD,
+    color = Method,
+    group = Method
+  )
+) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.8) +
+  labs(
+    x = "Propensity-score distribution",
+    y = "Total variation distance",
+    color = "Weighting method",
+    title = "Target-Population Shift Across Propensity-Score Distributions",
+    subtitle = "Lower TVD indicates a weighted propensity-score distribution closer to the original sample"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+ess_plot_df <- results %>%
+  mutate(
+    Scenario = paste0("Beta(", beta, ", ", gamma, ")")
+  ) %>%
+  select(
+    Scenario,
+    ESS_010,
+    ESS_delta_050,
+    ESS_smooth
+  ) %>%
+  pivot_longer(
+    cols = c(ESS_010, ESS_delta_050, ESS_smooth),
+    names_to = "Method",
+    values_to = "ESS_N"
+  ) %>%
+  mutate(
+    Method = recode(
+      Method,
+      ESS_010 = "Hard 0.10 trim",
+      ESS_delta_050 = "Boundary smooth (δ = 0.05)",
+      ESS_smooth = "Smooth weight e(1-e)"
+    )
+  )
+
+ggplot(
+  ess_plot_df,
+  aes(
+    x = Scenario,
+    y = ESS_N,
+    color = Method,
+    group = Method
+  )
+) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.8) +
+  labs(
+    x = "Propensity-score distribution",
+    y = "ESS / N",
+    color = "Weighting method",
+    title = "Effective Sample Size Across Propensity-Score Distributions",
+    subtitle = "Higher ESS/N indicates more effective use of the original sample"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+```
+
+
+
+
+
+
