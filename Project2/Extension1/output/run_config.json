@@ -1,0 +1,33 @@
+{
+  "raw_path": "C:\\Users\\1004c\\OneDrive\\\ubc14\ud0d5 \ud654\uba74\\network_extension_revised\\data\\0422allinforawnet.dta",
+  "raw_size": 919024,
+  "replicates": 5000,
+  "truth_replicates": 20000,
+  "n_villages": 150,
+  "seed": 20261102,
+  "degree_effect": [
+    0.0,
+    0.1
+  ],
+  "rates": [
+    0.0,
+    0.1,
+    0.2,
+    0.3,
+    0.5
+  ],
+  "alphas": [
+    -3.0,
+    -2.0,
+    -1.0,
+    0.0
+  ],
+  "betas": [
+    0.0,
+    2.0,
+    4.0,
+    6.0,
+    8.0,
+    10.0
+  ]
+}
